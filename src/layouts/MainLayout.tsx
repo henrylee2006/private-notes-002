@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { BottomNav, NavItem } from "../components/BottomNav";
-import { SidebarDrawer } from "../components/SidebarDrawer"; // 引入側邊抽屜
+import { SidebarDrawer } from "../components/SidebarDrawer";
 import { Wallet, BookOpen, Camera, LayoutGrid, Receipt } from "lucide-react";
 
 import AccountsPage from "../pages/AccountsPage";
@@ -19,8 +19,6 @@ const NAV_ITEMS: NavItem[] = [
 
 export const MainLayout: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>("ledger");
-
-  // 1. 新增側邊抽屜的開關狀態
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
 
   const renderPage = () => {
@@ -42,7 +40,7 @@ export const MainLayout: React.FC = () => {
 
   return (
     <div className="flex flex-col h-screen w-screen bg-zinc-950 text-white overflow-hidden relative">
-      {/* 2. 新增頂部 Header (包含左上角漢堡按鈕 ☰ 讓抽屜滑出) */}
+      {/* 頂部 Header 導覽區 */}
       <header className="flex items-center justify-between px-4 py-3 bg-zinc-900 border-b border-zinc-800 shrink-0 z-10">
         <button
           onClick={() => setIsSidebarOpen(true)}
@@ -54,22 +52,22 @@ export const MainLayout: React.FC = () => {
         <h1 className="text-sm font-bold tracking-widest text-zinc-200">
           私記
         </h1>
-        <div className="w-8" /> {/* 佔位塊，讓標題完美置中 */}
+        <div className="w-8" />
       </header>
 
-      {/* 3. 頁面主要內容區域 */}
+      {/* 頁面主要內容區域 */}
       <main className="flex-1 w-full overflow-y-auto p-4 pb-28">
         {renderPage()}
       </main>
 
-      {/* 4. 底部導覽列 */}
+      {/* 底部導覽列 */}
       <BottomNav
         items={NAV_ITEMS}
         activeId={activeTab}
         onChange={(id) => setActiveTab(id)}
       />
 
-      {/* 5. 側邊導覽抽屜 (掛載在最上層 Root，確保覆蓋全畫面) */}
+      {/* 側邊導覽抽屜 */}
       <SidebarDrawer
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}

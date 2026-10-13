@@ -13,17 +13,18 @@ export const SidebarDrawer: React.FC<SidebarDrawerProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex">
-      {/* 1. 左側滑出面板 (佔據約 82% 寬度，保留右側一指寬度點擊退出) */}
+      {/* 1. 左側滑出面板 (佔 82% 寬度，配合深色主題 bg-zinc-900) */}
       <div
-        className="w-[82%] max-w-sm bg-white h-full shadow-2xl flex flex-col transform transition-transform duration-300 ease-out z-10"
+        className="w-[82%] max-w-sm bg-zinc-900 text-white h-full shadow-2xl flex flex-col transform transition-transform duration-300 ease-out z-10 border-r border-zinc-800"
         onClick={(e) => e.stopPropagation()} // 防止點擊內容時誤觸關閉
       >
-        {/* 抽屜標題區 */}
-        <div className="p-4 border-b flex justify-between items-center">
-          <h2 className="text-lg font-bold">私記 - 選單</h2>
+        {/* 標題區 */}
+        <div className="p-4 border-b border-zinc-800 flex justify-between items-center">
+          <h2 className="text-base font-bold text-zinc-100">私記 - 選單</h2>
           <button
             onClick={onClose}
-            className="p-2 text-gray-500 hover:text-black rounded-lg"
+            className="p-2 text-zinc-400 hover:text-white rounded-lg transition-colors"
+            aria-label="關閉選單"
           >
             ✕
           </button>
@@ -31,37 +32,39 @@ export const SidebarDrawer: React.FC<SidebarDrawerProps> = ({
 
         {/* 導覽選單列表 */}
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
-          <a
-            href="#categories"
-            className="block p-3 rounded-lg hover:bg-gray-100 font-medium text-gray-700"
+          <button
+            onClick={onClose}
+            className="w-full text-left p-3 rounded-lg hover:bg-zinc-800 text-zinc-200 font-medium transition-colors"
           >
             🏷️ 分類與標籤管理
-          </a>
-          <a
-            href="#settings"
-            className="block p-3 rounded-lg hover:bg-gray-100 font-medium text-gray-700"
+          </button>
+          <button
+            onClick={onClose}
+            className="w-full text-left p-3 rounded-lg hover:bg-zinc-800 text-zinc-200 font-medium transition-colors"
           >
             ⚙️ 系統設定
-          </a>
-          <a
-            href="#backup"
-            className="block p-3 rounded-lg hover:bg-gray-100 font-medium text-gray-700"
+          </button>
+          <button
+            onClick={onClose}
+            className="w-full text-left p-3 rounded-lg hover:bg-zinc-800 text-zinc-200 font-medium transition-colors"
           >
             💾 資料備份與還原
-          </a>
+          </button>
         </div>
 
-        {/* 底部版本資訊 */}
-        <div className="p-4 border-t text-xs text-gray-400 text-center">
+        {/* 底部版本標示 */}
+        <div className="p-4 border-t border-zinc-800 text-xs text-zinc-500 text-center">
           Si-Ji PWA v1.0.0
         </div>
       </div>
 
-      {/* 2. 右側剩餘的空白區域 (自動填滿剩餘空間，點擊直接關閉抽屜) */}
+      {/* 2. 右側剩餘空間 (點擊可退出抽屜) */}
       <div
-        className="flex-1 bg-black/40 backdrop-blur-xs transition-opacity"
+        className="flex-1 bg-black/60 backdrop-blur-xs transition-opacity"
         onClick={onClose}
       />
     </div>
   );
 };
+
+export default SidebarDrawer;
