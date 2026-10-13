@@ -1,1 +1,0 @@
-{"name":"私記 - 離線相機記帳","short_name":"私記","description":"極簡、離線、隱私為本的相機記帳 PWA","start_url":"/","display":"standalone","background_color":"#ffffff","theme_color":"#121212","lang":"en","scope":"/","icons":[{"src":"/PS.png","sizes":"192x192","type":"image/png"},{"src":"/PS.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}]}
