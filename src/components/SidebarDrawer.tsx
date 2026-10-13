@@ -9,14 +9,21 @@ export const SidebarDrawer: React.FC<SidebarDrawerProps> = ({
   isOpen,
   onClose,
 }) => {
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex">
-      {/* 1. 左側滑出面板 (佔 82% 寬度，配合深色主題 bg-zinc-900) */}
+    <div
+      className={`fixed inset-0 z-50 flex transition-opacity duration-300 ${
+        isOpen
+          ? "opacity-100 pointer-events-auto"
+          : "opacity-0 pointer-events-none"
+      }`}
+    >
+      {/* 1. 左側滑出面板 (固定佔 82% 寬度，帶平滑 slide 動畫) */}
       <div
-        className="w-[82%] max-w-sm bg-zinc-900 text-white h-full shadow-2xl flex flex-col transform transition-transform duration-300 ease-out z-10 border-r border-zinc-800"
-        onClick={(e) => e.stopPropagation()} // 防止點擊內容時誤觸關閉
+        className={`bg-zinc-900 text-white h-full shadow-2xl flex flex-col transition-transform duration-300 ease-out z-10 border-r border-zinc-800 ${
+          isOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+        style={{ width: "82%", maxWidth: "320px" }}
+        onClick={(e) => e.stopPropagation()}
       >
         {/* 標題區 */}
         <div className="p-4 border-b border-zinc-800 flex justify-between items-center">
@@ -58,11 +65,8 @@ export const SidebarDrawer: React.FC<SidebarDrawerProps> = ({
         </div>
       </div>
 
-      {/* 2. 右側剩餘空間 (點擊可退出抽屜) */}
-      <div
-        className="flex-1 bg-black/60 backdrop-blur-xs transition-opacity"
-        onClick={onClose}
-      />
+      {/* 2. 右側剩餘 18% 空間 (點擊黑底背景可退出) */}
+      <div className="flex-1 bg-black/60 backdrop-blur-xs" onClick={onClose} />
     </div>
   );
 };
