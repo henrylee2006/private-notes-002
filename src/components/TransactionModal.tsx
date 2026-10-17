@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from "react";
-import { motion, AnimatePresence, PanInfo } from "framer-motion";
+import {
+  motion,
+  AnimatePresence,
+  PanInfo,
+  useDragControls,
+} from "framer-motion";
 import {
   X,
   Check,
   ChevronRight,
   ChevronLeft,
-  Camera,
   Calendar,
   Clock,
   Trash2,
@@ -13,6 +17,8 @@ import {
 } from "lucide-react";
 import { Transaction, TransactionItem } from "../types/transaction";
 import { Category } from "../types/category";
+import { AccountGroup, SubAccount } from "../types/account";
+import { getAllCategoriesFromDB, getAllAccountsFromDB } from "../services/db";
 
 interface TransactionModalProps {
   isOpen: boolean;
@@ -20,66 +26,6 @@ interface TransactionModalProps {
   onClose: () => void;
   onSave: (data: Partial<Transaction>) => void;
 }
-
-// 模擬分類資料庫（未來可改從 DB 讀取）
-const MOCK_CATEGORIES: Category[] = [
-  {
-    id: "food",
-    parentId: null,
-    name: "餐飲美食",
-    icon: "🍔",
-    type: "expense",
-    depth: 0,
-    sortOrder: 1,
-    targetScope: "transaction",
-  },
-  {
-    id: "food.breakfast",
-    parentId: "food",
-    name: "早餐",
-    type: "expense",
-    depth: 1,
-    sortOrder: 1,
-    targetScope: "both",
-  },
-  {
-    id: "food.lunch",
-    parentId: "food",
-    name: "午/晚餐",
-    type: "expense",
-    depth: 1,
-    sortOrder: 2,
-    targetScope: "both",
-  },
-  {
-    id: "food.drink",
-    parentId: "food",
-    name: "飲料手搖",
-    type: "expense",
-    depth: 1,
-    sortOrder: 3,
-    targetScope: "item",
-  },
-  {
-    id: "transport",
-    parentId: null,
-    name: "交通出行",
-    icon: "🚗",
-    type: "expense",
-    depth: 0,
-    sortOrder: 2,
-    targetScope: "transaction",
-  },
-  {
-    id: "transport.gas",
-    parentId: "transport",
-    name: "加油費",
-    type: "expense",
-    depth: 1,
-    sortOrder: 1,
-    targetScope: "both",
-  },
-];
 
 const formatForDateTimeInput = (timestamp: number): string => {
   const date = new Date(timestamp);
@@ -96,12 +42,20 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   onSave,
 }) => {
   const [step, setStep] = useState(1);
+  const dragControls = useDragControls();
+
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [accountGroups, setAccountGroups] = useState<AccountGroup[]>([]);
 
   const [amount, setAmount] = useState<string>("");
   const [type, setType] = useState<"expense" | "income">("expense");
   const [selectedMainCatId, setSelectedMainCatId] = useState<string>("");
   const [categoryId, setCategoryId] = useState<string>("");
-  const [accountId, setAccountId] = useState<string>("");
+
+  const [selectedAccountGroup, setSelectedAccountGroup] =
+    useState<AccountGroup | null>(null);
+  const [accountId, setAccountId] = useState<string>("現金");
+
   const [note, setNote] = useState<string>("");
   const [items, setItems] = useState<TransactionItem[]>([]);
 
@@ -112,62 +66,119 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [settlementAtInput, setSettlementAtInput] = useState<string>("");
 
   useEffect(() => {
-    if (initialData) {
-      setAmount(initialData.amount.toString());
-      setCategoryId(initialData.categoryId || "");
-      setAccountId(initialData.accountId || "");
-      setNote(initialData.note || "");
-      setItems(initialData.items || []);
+    const loadDynamicData = async () => {
+      try {
+        const [dbCategories, dbAccounts] = await Promise.all([
+          getAllCategoriesFromDB(),
+          getAllAccountsFromDB(),
+        ]);
 
-      setTransactionAtInput(formatForDateTimeInput(initialData.transactionAt));
+        setCategories(dbCategories);
+        setAccountGroups(dbAccounts);
 
-      if (initialData.settlementAt) {
-        setHasSettlement(true);
-        setSettlementAtInput(formatForDateTimeInput(initialData.settlementAt));
-      } else {
-        setHasSettlement(false);
-        setSettlementAtInput("");
+        if (initialData) {
+          setAmount(initialData.amount.toString());
+          setCategoryId(initialData.categoryId || "");
+          setNote(initialData.note || "");
+          setItems(initialData.items || []);
+
+          const targetAccName = initialData.accountId || "現金";
+          setAccountId(targetAccName);
+
+          const matchedGroup = dbAccounts.find((g: AccountGroup) =>
+            g.subAccounts.some((sub: SubAccount) => sub.name === targetAccName),
+          );
+          if (matchedGroup) {
+            setSelectedAccountGroup(matchedGroup);
+          } else if (dbAccounts.length > 0) {
+            setSelectedAccountGroup(dbAccounts[0]);
+          }
+
+          const currentCat = dbCategories.find(
+            (c: Category) => c.id === initialData.categoryId,
+          );
+          if (currentCat) {
+            setType(currentCat.type);
+            if (currentCat.depth === 0) {
+              setSelectedMainCatId(currentCat.id);
+            } else if (currentCat.parentId) {
+              setSelectedMainCatId(currentCat.parentId);
+            }
+          }
+
+          setTransactionAtInput(
+            formatForDateTimeInput(initialData.transactionAt),
+          );
+
+          if (initialData.settlementAt) {
+            setHasSettlement(true);
+            setSettlementAtInput(
+              formatForDateTimeInput(initialData.settlementAt),
+            );
+          } else {
+            setHasSettlement(false);
+            setSettlementAtInput("");
+          }
+
+          setStep(5);
+        } else {
+          const now = Date.now();
+          setAmount("");
+          setType("expense");
+
+          const defaultMain = dbCategories.find(
+            (c: Category) => c.type === "expense" && c.depth === 0,
+          );
+          if (defaultMain) {
+            setSelectedMainCatId(defaultMain.id);
+            setCategoryId(defaultMain.id); // 預設主分類本身
+          }
+
+          if (dbAccounts.length > 0) {
+            setSelectedAccountGroup(dbAccounts[0]);
+            if (dbAccounts[0].subAccounts.length > 0) {
+              setAccountId(dbAccounts[0].subAccounts[0].name);
+            }
+          }
+
+          setNote("");
+          setItems([]);
+          setTransactionAtInput(formatForDateTimeInput(now));
+          setHasSettlement(false);
+          setSettlementAtInput("");
+          setStep(1);
+        }
+      } catch (error) {
+        console.error("動態載入 Modal 資料失敗:", error);
       }
+    };
 
-      setStep(5);
-    } else {
-      const now = Date.now();
-      setAmount("");
-      setType("expense");
-      setSelectedMainCatId("food");
-      setCategoryId("food.breakfast");
-      setAccountId("💵 現金");
-      setNote("");
-      setItems([]);
-      setTransactionAtInput(formatForDateTimeInput(now));
-      setHasSettlement(false);
-      setSettlementAtInput("");
-      setStep(1);
+    if (isOpen) {
+      loadDynamicData();
     }
   }, [initialData, isOpen]);
 
-  // 過濾整筆交易專用主分類
-  const mainCategories = MOCK_CATEGORIES.filter(
+  // 1. 過濾當前收支型態的主分類
+  const mainCategories = categories.filter(
     (c) =>
       c.type === type &&
       c.depth === 0 &&
       (c.targetScope === "transaction" || c.targetScope === "both"),
   );
 
-  // 過濾對應的副分類
-  const subCategories = MOCK_CATEGORIES.filter(
+  // 2. 嚴格過濾「隻屬於」當前選中主分類 ID 的副分類
+  const subCategories = categories.filter(
     (c) =>
       c.parentId === selectedMainCatId &&
       (c.targetScope === "transaction" || c.targetScope === "both"),
   );
 
-  // 明細專用分類
-  const itemCategories = MOCK_CATEGORIES.filter(
+  const itemCategories = categories.filter(
     (c) => c.targetScope === "item" || c.targetScope === "both",
   );
 
   const handleDragEnd = (_: unknown, info: PanInfo) => {
-    if (info.offset.y > 80 || info.velocity.y > 200) {
+    if (info.offset.y > 100 || info.velocity.y > 300) {
       onClose();
     }
   };
@@ -182,12 +193,29 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     onSave({
       amount: Number(amount) || 0,
       categoryId: categoryId || selectedMainCatId || "general",
-      accountId: accountId || "cash",
+      accountId: accountId || "現金",
       note,
       items,
       transactionAt: txTimestamp,
       settlementAt: stTimestamp,
     });
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (initialData) {
+        handleConfirmSave();
+        return;
+      }
+      if (step === 1 && amount) {
+        setStep(2);
+      } else if (step === 5) {
+        handleConfirmSave();
+      } else if (step < 5) {
+        setStep((s) => s + 1);
+      }
+    }
   };
 
   return (
@@ -207,15 +235,18 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
             transition={{ duration: 0.22, ease: "easeOut" }}
+            drag="y"
+            dragControls={dragControls}
+            dragListener={false}
+            dragConstraints={{ top: 0, bottom: 0 }}
+            dragElastic={{ top: 0, bottom: 0.5 }}
+            onDragEnd={handleDragEnd}
+            onKeyDown={handleKeyDown}
             className="relative w-full h-[calc(100vh-48px)] bg-zinc-900 border-t border-white/10 rounded-t-[32px] shadow-2xl flex flex-col overflow-hidden z-10 text-white cursor-default"
           >
-            {/* 頂部手勢拖曳區（唯一可下滑關閉區） */}
-            <motion.div
-              drag="y"
-              dragConstraints={{ top: 0, bottom: 0 }}
-              dragElastic={{ top: 0, bottom: 0.2 }}
-              onDragEnd={handleDragEnd}
-              className="flex flex-col items-center pt-3 pb-3 border-b border-zinc-800 shrink-0 select-none cursor-grab active:cursor-grabbing bg-zinc-900 z-20"
+            <div
+              onPointerDown={(e) => dragControls.start(e)}
+              className="flex flex-col items-center pt-3 pb-3 border-b border-zinc-800 shrink-0 select-none bg-zinc-950/40 z-20 cursor-grab active:cursor-grabbing touch-none"
             >
               <div className="w-10 h-1 bg-zinc-700 rounded-full mb-3" />
 
@@ -252,14 +283,9 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   ))}
                 </div>
               )}
-            </motion.div>
+            </div>
 
-            {/* 表單內容滾動區（阻止事件冒泡解決手勢衝突） */}
-            <div
-              onPointerDownCapture={(e) => e.stopPropagation()}
-              className="flex-1 overflow-y-auto px-6 py-6 flex flex-col gap-6"
-            >
-              {/* Step 1: 金額 */}
+            <div className="flex-1 overflow-y-auto px-6 py-6 flex flex-col gap-6">
               {(step === 1 || initialData) && (
                 <div className="flex flex-col gap-2">
                   <label className="text-xs text-zinc-400">
@@ -281,7 +307,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 </div>
               )}
 
-              {/* Step 2: 收支類型 */}
+              {/* Step 2: 切換收支類型時，同步重置主分類與副分類 */}
               {(step === 2 || initialData) && (
                 <div className="flex flex-col gap-2">
                   <label className="text-xs text-zinc-400">
@@ -291,6 +317,13 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                     <button
                       onClick={() => {
                         setType("expense");
+                        const firstExp = categories.find(
+                          (c) => c.type === "expense" && c.depth === 0,
+                        );
+                        if (firstExp) {
+                          setSelectedMainCatId(firstExp.id);
+                          setCategoryId(firstExp.id); // 🌟 重置副分類
+                        }
                         if (!initialData) setStep(3);
                       }}
                       className={`p-3.5 rounded-2xl font-semibold border transition-all ${
@@ -304,6 +337,13 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                     <button
                       onClick={() => {
                         setType("income");
+                        const firstInc = categories.find(
+                          (c) => c.type === "income" && c.depth === 0,
+                        );
+                        if (firstInc) {
+                          setSelectedMainCatId(firstInc.id);
+                          setCategoryId(firstInc.id); // 🌟 重置副分類
+                        }
                         if (!initialData) setStep(3);
                       }}
                       className={`p-3.5 rounded-2xl font-semibold border transition-all ${
@@ -318,7 +358,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 </div>
               )}
 
-              {/* Step 3: 主副分類選擇 */}
+              {/* Step 3: 選擇主副分類 */}
               {(step === 3 || initialData) && (
                 <div className="flex flex-col gap-3">
                   <label className="text-xs text-zinc-400">
@@ -330,7 +370,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                         key={main.id}
                         onClick={() => {
                           setSelectedMainCatId(main.id);
-                          setCategoryId(main.id);
+                          setCategoryId(main.id); // 🌟 點擊主分類時，將副分類重置為主分類本身
                         }}
                         className={`px-3.5 py-2 rounded-xl text-xs font-medium shrink-0 flex items-center gap-1.5 border transition-all ${
                           selectedMainCatId === main.id
@@ -371,35 +411,66 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 </div>
               )}
 
-              {/* Step 4: 帳戶 */}
               {(step === 4 || initialData) && (
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-3">
                   <label className="text-xs text-zinc-400">
-                    4. 選擇交易帳戶
+                    4. 選擇支付帳戶
                   </label>
-                  <div className="grid grid-cols-2 gap-2.5">
-                    {[
-                      "💵 現金",
-                      "💳 玉山銀行",
-                      "💳 國泰信用卡",
-                      "📱 街口支付",
-                    ].map((acc) => (
-                      <button
-                        key={acc}
-                        onClick={() => {
-                          setAccountId(acc);
-                          if (!initialData) setStep(5);
-                        }}
-                        className={`p-3 text-xs rounded-xl border text-left ${accountId === acc ? "bg-white text-zinc-950 font-bold" : "bg-zinc-800/50 text-zinc-300"}`}
-                      >
-                        {acc}
-                      </button>
-                    ))}
+                  <div className="flex gap-2 overflow-x-auto pb-1">
+                    {accountGroups.map((group: AccountGroup) => {
+                      const isGroupSelected =
+                        selectedAccountGroup?.id === group.id;
+                      return (
+                        <button
+                          key={group.id}
+                          onClick={() => {
+                            setSelectedAccountGroup(group);
+                            if (group.subAccounts.length > 0) {
+                              setAccountId(group.subAccounts[0].name);
+                            }
+                          }}
+                          className={`px-3.5 py-2 rounded-xl text-xs font-medium shrink-0 flex items-center gap-1.5 border transition-all ${
+                            isGroupSelected
+                              ? "bg-white text-zinc-950 font-bold border-white"
+                              : "bg-zinc-800/60 border-white/5 text-zinc-400"
+                          }`}
+                        >
+                          <span>{group.icon}</span>
+                          <span>{group.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="p-3 bg-zinc-800/30 rounded-2xl border border-white/5 grid grid-cols-2 gap-2">
+                    {selectedAccountGroup?.subAccounts.map(
+                      (sub: SubAccount) => {
+                        const isSubSelected = accountId === sub.name;
+                        return (
+                          <button
+                            key={sub.id}
+                            onClick={() => {
+                              setAccountId(sub.name);
+                              if (!initialData) setStep(5);
+                            }}
+                            className={`p-3 text-xs rounded-xl border text-left flex justify-between items-center ${
+                              isSubSelected
+                                ? "bg-zinc-100 text-zinc-950 font-bold"
+                                : "bg-zinc-800/80 text-zinc-300"
+                            }`}
+                          >
+                            <span>{sub.name}</span>
+                            {isSubSelected && (
+                              <Check size={14} className="text-zinc-950" />
+                            )}
+                          </button>
+                        );
+                      },
+                    )}
                   </div>
                 </div>
               )}
 
-              {/* Step 5: 雙時序與明細拆分 */}
               {(step === 5 || initialData) && (
                 <div className="flex flex-col gap-4 bg-zinc-800/30 rounded-2xl p-4 border border-white/5">
                   <label className="text-xs font-semibold text-zinc-300">
@@ -444,7 +515,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                     )}
                   </div>
 
-                  {/* 明細項目編輯器 (套娃結構) */}
                   <div className="flex flex-col gap-2 pt-2 border-t border-zinc-800">
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-zinc-400">
@@ -526,7 +596,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 </div>
               )}
 
-              {/* 導覽按鈕 */}
               {!initialData && (
                 <div className="flex gap-3 mt-auto pt-2">
                   {step > 1 && (

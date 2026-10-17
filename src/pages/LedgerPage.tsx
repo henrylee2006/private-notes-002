@@ -1,31 +1,42 @@
 import React, { useState, useEffect } from "react";
 import { UI_LABELS } from "../constants/labels";
 import { TransactionModal } from "../components/TransactionModal";
-import { Plus, Receipt, Edit3 } from "lucide-react";
+import { Plus, Receipt } from "lucide-react";
 import { Transaction } from "../types/transaction";
-import { getAllTransactionsFromDB, saveTransactionToDB } from "../services/db";
+import { Category } from "../types/category";
+import {
+  getAllTransactionsFromDB,
+  saveTransactionToDB,
+  getAllCategoriesFromDB,
+  seedInitialDataIfNeeded,
+} from "../services/db";
 
 export const LedgerPage: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] =
     useState<Transaction | null>(null);
 
-  // 每次進入頁面時，從 IndexedDB 載入永久資料
   useEffect(() => {
-    const loadData = async () => {
+    const initApp = async () => {
       try {
-        const savedData = await getAllTransactionsFromDB();
-        setTransactions(savedData);
+        await seedInitialDataIfNeeded();
+        const [savedTransactions, savedCategories] = await Promise.all([
+          getAllTransactionsFromDB(),
+          getAllCategoriesFromDB(),
+        ]);
+        setTransactions(savedTransactions);
+        setCategories(savedCategories);
       } catch (error) {
         console.error("載入持久化資料失敗:", error);
       } finally {
         setIsLoading(false);
       }
     };
-    loadData();
+    initApp();
   }, []);
 
   const handleOpenCreate = () => {
@@ -38,7 +49,6 @@ export const LedgerPage: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  // 儲存並寫入 IndexedDB
   const handleSaveTransaction = async (savedTx: Partial<Transaction>) => {
     let targetTx: Transaction;
 
@@ -53,8 +63,8 @@ export const LedgerPage: React.FC = () => {
         id: `tx_${Date.now()}`,
         syncStatus: "pending",
         transactionAt: Date.now(),
-        accountId: savedTx.accountId || "cash",
-        categoryId: savedTx.categoryId || "general",
+        accountId: savedTx.accountId || "現金",
+        categoryId: savedTx.categoryId || "food.lunch",
         amount: savedTx.amount || 0,
         fee: savedTx.fee || 0,
         items: savedTx.items || [],
@@ -77,6 +87,27 @@ export const LedgerPage: React.FC = () => {
     });
 
     setIsModalOpen(false);
+  };
+
+  // 🌟 動態從資料庫中的分類向上解析主分類圖示與名稱
+  const getMainCategoryInfo = (categoryId: string) => {
+    const currentCat = categories.find((c) => c.id === categoryId);
+    if (!currentCat) return { name: "未分類", icon: "📌", type: "expense" };
+
+    if (currentCat.depth === 0 || !currentCat.parentId) {
+      return {
+        name: currentCat.name,
+        icon: currentCat.icon || "📌",
+        type: currentCat.type,
+      };
+    }
+
+    const mainCat = categories.find((c) => c.id === currentCat.parentId);
+    return {
+      name: mainCat ? mainCat.name : currentCat.name,
+      icon: mainCat?.icon || "📌",
+      type: mainCat ? mainCat.type : currentCat.type,
+    };
   };
 
   if (isLoading) {
@@ -110,42 +141,49 @@ export const LedgerPage: React.FC = () => {
         </div>
       ) : (
         <div className="flex flex-col gap-2.5">
-          {transactions.map((tx) => (
-            <div
-              key={tx.id}
-              onClick={() => handleOpenEdit(tx)}
-              className="flex items-center justify-between p-4 bg-zinc-900/80 hover:bg-zinc-800/80 border border-white/5 rounded-2xl cursor-pointer transition-all active:scale-[0.99]"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center text-zinc-300">
-                  <Edit3 size={18} />
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium text-zinc-200">
-                    {tx.categoryId || "未分類"}
-                  </span>
-                  <span className="text-xs text-zinc-500">
-                    {new Date(tx.transactionAt).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}{" "}
-                    • {tx.accountId}
-                  </span>
-                </div>
-              </div>
+          {transactions.map((tx) => {
+            const mainCatInfo = getMainCategoryInfo(tx.categoryId);
+            const isIncome = mainCatInfo.type === "income";
 
-              <div className="flex flex-col items-end">
-                <span className="text-base font-bold tracking-tight text-white">
-                  $ {tx.amount.toLocaleString()}
-                </span>
-                {tx.note && (
-                  <span className="text-xs text-zinc-400 max-w-[120px] truncate">
-                    {tx.note}
+            return (
+              <div
+                key={tx.id}
+                onClick={() => handleOpenEdit(tx)}
+                className="flex items-center justify-between p-4 bg-zinc-900/80 hover:bg-zinc-800/80 border border-white/5 rounded-2xl cursor-pointer transition-all active:scale-[0.99]"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center text-lg shadow-inner">
+                    {mainCatInfo.icon}
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium text-zinc-200">
+                      {mainCatInfo.name}
+                    </span>
+                    <span className="text-xs text-zinc-500">
+                      {new Date(tx.transactionAt).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}{" "}
+                      • {tx.accountId}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col items-end">
+                  <span
+                    className={`text-base font-bold tracking-tight ${isIncome ? "text-emerald-400" : "text-white"}`}
+                  >
+                    {isIncome ? "+" : "$"} {tx.amount.toLocaleString()}
                   </span>
-                )}
+                  {tx.note && (
+                    <span className="text-xs text-zinc-400 max-w-[120px] truncate">
+                      {tx.note}
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

@@ -8,5 +8,5 @@ export interface Category {
   type: "expense" | "income"; // 支出或收入
   depth: number; // 深度層級 (0: 主分類, 1: 副分類...)
   sortOrder: number; // 排序順序
-  targetScope: CategoryTargetScope; // 🌟 作用域標記
+  targetScope: CategoryTargetScope; // 作用域標記
 }
